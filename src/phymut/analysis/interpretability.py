@@ -24,6 +24,40 @@ class InterpretabilityConfig:
     cutoff_date: date
     num_plots: int = 40
     n_weather_pcs: int = 8
+    feature_label_map: Dict[str, str] | None = None
+    feature_label_order: List[str] | None = None
+
+
+def _build_feature_labels(
+    input_rows: List[str],
+    n_weather_pcs: int,
+    label_map: Dict[str, str] | None,
+    label_order: List[str] | None,
+) -> List[str]:
+    default_base = input_rows + [f"weather_pc{i+1}" for i in range(n_weather_pcs)]
+    if label_order:
+        base = list(label_order)
+        if label_map:
+            inverse = {v: k for k, v in label_map.items()}
+            if any(item not in default_base for item in base):
+                mapped = [inverse.get(item, item) for item in base]
+                base = mapped
+    else:
+        base = default_base
+    if not label_map:
+        return base
+    return [label_map.get(name, name) for name in base]
+
+
+def _apply_feature_order(df: pd.DataFrame, order: List[str]) -> pd.DataFrame:
+    if not order or "feature" not in df.columns:
+        return df
+    ordered = pd.Categorical(df["feature"], categories=order, ordered=True)
+    df = df.copy()
+    df["feature"] = ordered
+    df = df.sort_values(["feature", "horizon"]).reset_index(drop=True)
+    df["feature"] = df["feature"].astype(str)
+    return df
 
 
 def _safe_corr(x: np.ndarray, y: np.ndarray) -> float:
@@ -72,7 +106,12 @@ def build_feature_yield_arrays(
     if not dates:
         raise RuntimeError(f"No overlapping dates for season {season}")
 
-    feature_names = cfg.input_rows + list(weather_pc_df.columns)
+    feature_names = _build_feature_labels(
+        cfg.input_rows,
+        cfg.n_weather_pcs,
+        cfg.feature_label_map,
+        cfg.feature_label_order,
+    )
     features_by_date: List[np.ndarray] = []
     yields_by_date: List[np.ndarray] = []
     valid_dates: List[date] = []
@@ -141,16 +180,19 @@ def plot_lagged_correlation_heatmap(
     out_path: str,
     *,
     title: str,
+    feature_order: List[str] | None = None,
 ) -> None:
     if df.empty:
         return
     pivot = df.pivot(index="feature", columns="horizon", values="corr")
+    if feature_order:
+        pivot = pivot.reindex(feature_order)
     fig, ax = plt.subplots(figsize=(8, max(4, 0.45 * len(pivot.index))))
     im = ax.imshow(pivot.values, cmap="coolwarm", vmin=-1, vmax=1, aspect="auto")
     ax.set_xticks(range(len(pivot.columns)))
     ax.set_xticklabels([str(c) for c in pivot.columns], fontsize=12)
     ax.set_yticks(range(len(pivot.index)))
-    ax.set_yticklabels(pivot.index, fontsize=10)
+    ax.set_yticklabels(feature_order if feature_order else pivot.index, fontsize=10)
     ax.set_xlabel("Forecast horizon (weeks)", fontsize=12)
     ax.set_ylabel("Feature", fontsize=12)
     ax.set_title(title, fontsize=14)
@@ -209,6 +251,7 @@ def compute_permutation_importance(
     model_name: str,
     seq_len: int,
     forecast_len: int,
+    horizons: List[int] | None = None,
     hid_dim: int,
     num_layers: int,
     lr: float,
@@ -239,6 +282,14 @@ def compute_permutation_importance(
     )
     X_all = np.nan_to_num(X_pre)
     Y_target = np.nan_to_num(Y_post_yield)
+    if horizons:
+        max_h = max(horizons)
+        if max_h > Y_target.shape[1]:
+            raise ValueError(
+                f"Requested horizon {max_h} exceeds available forecast length {Y_target.shape[1]}"
+            )
+        Y_target = Y_target[:, :max_h]
+        forecast_len = max_h
 
     X_train, X_test, y_train, y_test = train_test_split(
         X_all,
@@ -271,7 +322,12 @@ def compute_permutation_importance(
     base_rmse = _rmse_per_horizon(y_test, base_pred)
     base_rmse_overall = float(np.sqrt(np.mean((base_pred - y_test) ** 2)))
 
-    feature_names = cfg.input_rows + [f"weather_pc{i+1}" for i in range(cfg.n_weather_pcs)]
+    feature_names = _build_feature_labels(
+        cfg.input_rows,
+        cfg.n_weather_pcs,
+        cfg.feature_label_map,
+        cfg.feature_label_order,
+    )
     records = []
     n_samples = X_test.shape[0]
 
@@ -328,17 +384,20 @@ def plot_importance_heatmap(
     out_path: str,
     *,
     title: str,
+    feature_order: List[str] | None = None,
 ) -> None:
     sub = df[df["horizon"] != "overall"].copy()
     if sub.empty:
         return
     pivot = sub.pivot(index="feature", columns="horizon", values="rmse_delta")
+    if feature_order:
+        pivot = pivot.reindex(feature_order)
     fig, ax = plt.subplots(figsize=(8, max(4, 0.45 * len(pivot.index))))
     im = ax.imshow(pivot.values, cmap="viridis", aspect="auto")
     ax.set_xticks(range(len(pivot.columns)))
     ax.set_xticklabels([str(c) for c in pivot.columns], fontsize=12)
     ax.set_yticks(range(len(pivot.index)))
-    ax.set_yticklabels(pivot.index, fontsize=10)
+    ax.set_yticklabels(feature_order if feature_order else pivot.index, fontsize=10)
     ax.set_xlabel("Forecast horizon (weeks)", fontsize=12)
     ax.set_ylabel("Feature", fontsize=12)
     ax.set_title(title, fontsize=14)
@@ -367,11 +426,19 @@ def run_lagged_correlation_analysis(
         )
         horizons = horizons_by_season.get(season, [])
         df = compute_lagged_correlations(features, yields, feature_names, horizons, season)
+        label_order = _build_feature_labels(
+            season_cfg.input_rows,
+            season_cfg.n_weather_pcs,
+            season_cfg.feature_label_map,
+            season_cfg.feature_label_order,
+        )
+        df = _apply_feature_order(df, label_order)
         all_rows.append(df)
         plot_lagged_correlation_heatmap(
             df,
             out_path=os.path.join(out_root, f"lagged_corr_{season}.png"),
             title=f"Lagged feature-yield correlations ({season})",
+            feature_order=label_order,
         )
     if not all_rows:
         return pd.DataFrame()
@@ -387,6 +454,7 @@ def run_permutation_importance_analysis(
     model_name: str,
     seq_len_by_season: Dict[str, int],
     forecast_len_by_season: Dict[str, int],
+    horizons_by_season: Dict[str, List[int]],
     hid_dim: int,
     num_layers: int,
     lr: float,
@@ -399,22 +467,32 @@ def run_permutation_importance_analysis(
         season_cfg = cfg_by_season.get(season, cfg) if cfg_by_season else cfg
         seq_len = seq_len_by_season[season]
         forecast_len = forecast_len_by_season[season]
+        horizons = horizons_by_season.get(season)
         df, _ = compute_permutation_importance(
             season,
             season_cfg,
             model_name=model_name,
             seq_len=seq_len,
             forecast_len=forecast_len,
+            horizons=horizons,
             hid_dim=hid_dim,
             num_layers=num_layers,
             lr=lr,
             num_epochs=num_epochs,
         )
+        label_order = _build_feature_labels(
+            season_cfg.input_rows,
+            season_cfg.n_weather_pcs,
+            season_cfg.feature_label_map,
+            season_cfg.feature_label_order,
+        )
+        df = _apply_feature_order(df, label_order)
         all_rows.append(df)
         plot_importance_heatmap(
             df,
             out_path=os.path.join(out_root, f"perm_importance_{season}_seq{seq_len}.png"),
-            title=f"Permutation importance ({season}, seq={seq_len})",
+            title=f"Permutation importance ({season}, seq={seq_len}, horizon={forecast_len})",
+            feature_order=label_order,
         )
     if not all_rows:
         return pd.DataFrame()

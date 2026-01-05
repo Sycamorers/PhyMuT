@@ -23,6 +23,38 @@ def main() -> None:
         cutoff_date=date(2024, 1, 5),
         num_plots=40,
         n_weather_pcs=8,
+        feature_label_map={
+            "strawberry_flower": "F",
+            "strawberry_green": "G",
+            "strawberry_white": "W",
+            "strawberry_pink": "P",
+            "Area": "Area",
+            "Volume": "Volume",
+            "weather_pc1": "weather_0",
+            "weather_pc2": "weather_1",
+            "weather_pc3": "weather_2",
+            "weather_pc4": "weather_3",
+            "weather_pc5": "weather_4",
+            "weather_pc6": "weather_5",
+            "weather_pc7": "weather_6",
+            "weather_pc8": "weather_7",
+        },
+        feature_label_order=[
+            "F",
+            "G",
+            "W",
+            "P",
+            "Area",
+            "Volume",
+            "weather_0",
+            "weather_1",
+            "weather_2",
+            "weather_3",
+            "weather_4",
+            "weather_5",
+            "weather_6",
+            "weather_7",
+        ],
     )
     cfg_by_season = {
         "2324": cfg,
@@ -31,6 +63,8 @@ def main() -> None:
             cutoff_date=date(2025, 1, 5),
             num_plots=cfg.num_plots,
             n_weather_pcs=cfg.n_weather_pcs,
+            feature_label_map=cfg.feature_label_map,
+            feature_label_order=cfg.feature_label_order,
         ),
     }
 
@@ -44,8 +78,7 @@ def main() -> None:
         "2425": 4,
     }
     forecast_len_by_season = {
-        "2324": 8 - seq_len_by_season["2324"],
-        "2425": 9 - seq_len_by_season["2425"],
+        season: len(horizons_by_season[season]) for season in seasons
     }
 
     out_root = str(output_dir("interpretability"))
@@ -65,6 +98,7 @@ def main() -> None:
         model_name="lstm",
         seq_len_by_season=seq_len_by_season,
         forecast_len_by_season=forecast_len_by_season,
+        horizons_by_season=horizons_by_season,
         hid_dim=64,
         num_layers=1,
         lr=1e-3,

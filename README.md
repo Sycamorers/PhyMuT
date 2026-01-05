@@ -138,9 +138,12 @@ The interpretability script runs two complementary analyses:
 
 - `input_rows`: feature list used for phenology/canopy inputs.
 - `horizons_by_season`: correlation horizons to evaluate.
-- `seq_len_by_season`: training sequence length (used to derive forecast length).
+- `seq_len_by_season`: training sequence length.
+- `forecast_len_by_season`: derived from `horizons_by_season`.
 - `model_name`, `hid_dim`, `num_layers`, `lr`, `num_epochs`: attribution model
   hyperparameters.
+- `feature_label_map` and `feature_label_order`: enforce consistent feature names
+  and ordering (F, G, W, P, Area, Volume, weather_0..weather_7).
 
 ## Notes for reproducibility
 
