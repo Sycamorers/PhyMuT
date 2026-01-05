@@ -85,6 +85,12 @@ Data diagnostics (plots and summary tables):
 python scripts/data_analysis.py
 ```
 
+Interpretability (lagged correlations + permutation importance):
+
+```
+PYTHONPATH=src python scripts/interpretability_analysis.py
+```
+
 Weather embedding training:
 
 ```
@@ -98,6 +104,43 @@ All generated artifacts are written under `outputs/`:
 - `outputs/forecasting/results/`: prediction plots and metrics
 - `outputs/forecasting/logs/`: parallel run logs
 - `outputs/analysis_plots/`: diagnostic plots and CSV summaries
+- `outputs/interpretability/`: lagged correlation plots, permutation importance plots,
+  and CSV summaries for interpretability
+
+## Interpretability details
+
+The interpretability script runs two complementary analyses:
+
+1) Lagged correlation analysis
+   - Computes Pearson correlations between each feature at week `t` and yield at
+     week `t+h`, for each forecast horizon `h`.
+   - Uses the same feature set as the forecasting model: phenology counts
+     (`strawberry_flower`, `strawberry_green`, `strawberry_white`,
+     `strawberry_pink`), canopy metrics (`Area`, `Volume`), and 8 PCA components
+     of the weather embedding (`weather_pc1..8`).
+   - Produces per-season heatmaps and a CSV table:
+     `outputs/interpretability/lagged_corr_2324.png`,
+     `outputs/interpretability/lagged_corr_2425.png`,
+     `outputs/interpretability/lagged_correlations.csv`.
+
+2) Permutation importance (model attribution)
+   - Trains a lightweight LSTM on the same inputs as the main pipeline and then
+     permutes one feature at a time across plots (preserving the time axis).
+   - Reports the RMSE delta per horizon and overall, capturing how much each
+     feature degrades forecast performance when shuffled.
+   - Outputs:
+     `outputs/interpretability/perm_importance_2324_seq4.png`,
+     `outputs/interpretability/perm_importance_2425_seq4.png`,
+     `outputs/interpretability/permutation_importance.csv`,
+     `outputs/interpretability/permutation_importance_topk.csv`.
+
+### Configuration (edit `scripts/interpretability_analysis.py`)
+
+- `input_rows`: feature list used for phenology/canopy inputs.
+- `horizons_by_season`: correlation horizons to evaluate.
+- `seq_len_by_season`: training sequence length (used to derive forecast length).
+- `model_name`, `hid_dim`, `num_layers`, `lr`, `num_epochs`: attribution model
+  hyperparameters.
 
 ## Notes for reproducibility
 
