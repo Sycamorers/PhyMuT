@@ -1,4 +1,5 @@
-# PhyMuT: Strawberry Yield Forecasting
+# PhyMuT: A Physics-Aware, Multi-Modal Time-Series Model for Strawberry Yield Forecasting<img width="468" height="51" alt="image" src="https://github.com/user-attachments/assets/99f8c55e-6e7d-497c-b558-fa261b16c948" />
+
 
 This repository contains the code for the PhyMuT strawberry yield forecasting
 pipeline used in the paper. It includes:
