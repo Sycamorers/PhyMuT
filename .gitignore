@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.DS_Store
+
+# Large artifacts and local outputs
+outputs/
+archive/
+
+# Model weights and embeddings
+*.pt
+*.pth
+*.npy
+*.npz
+
+# Data (keep README only)
+data/*
+!data/README.md
