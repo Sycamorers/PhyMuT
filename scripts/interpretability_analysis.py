@@ -74,8 +74,8 @@ def main() -> None:
     }
 
     seq_len_by_season = {
-        "2324": 4,
-        "2425": 4,
+        "2324": 5,
+        "2425": 5,
     }
     forecast_len_by_season = {
         season: len(horizons_by_season[season]) for season in seasons
